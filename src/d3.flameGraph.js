@@ -401,6 +401,29 @@
       return chart;
     };
 
+    // returns the nodes/frames that are at the top of the stack
+    chart.getTopNodes = function (d) {
+      var topNodes = [];
+
+      function walkTree(node) {
+        if (node.children) {
+          node.children.forEach(function (child) {
+            if (child.dummy) {
+              topNodes.push(node);
+            } else {
+              walkTree(child);
+            }
+          });
+        } else {
+            if (node.name) {
+              topNodes.push(node);
+            }
+        }
+      }
+        walkTree(d);
+        return topNodes;
+    };
+
     return chart;
   }
 
