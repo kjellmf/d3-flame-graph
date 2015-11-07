@@ -9,29 +9,30 @@
       selection = null, // selection
       tooltip = true, // enable tooltip
       title = "", // graph title
-      tooltipDirection = "s", // tooltip direction
-      tooltipOffset = [8, 0],
       transitionDuration = 750,
-      transitionEase = "cubic-in-out"; // tooltip offset
+      transitionEase = "cubic-in-out", // tooltip offset
+      sort = true,
+      clickHandler = null;
 
     var tip = d3.tip()
-      .direction(tooltipDirection)
-      .offset(tooltipOffset)
-      .attr('class', 'd3-tip')
+      .direction("s")
+      .offset([8, 0])
+      .attr('class', 'd3-flame-graph-tip')
       .html(function(d) { return label(d); });
 
+    var labelFormat = function(d) {
+      return d.name + " (" + d3.round(100 * d.dx, 3) + "%, " + d.value + " samples)";
+    };
 
     function setDetails(t) {
-      document.getElementById("details").innerHTML = t;
+      var details = document.getElementById("details");
+      if (details)
+        details.innerHTML = t;
     }
-
-
-    var x = d3.scale.linear().range([0, w]),
-        y = d3.scale.linear().range([0, c]);
 
     function label(d) {
       if (!d.dummy) {
-        return d.name + " (" + d3.round(100 * d.dx, 3) + "%, " + d.value + " samples)";
+        return labelFormat(d);
       } else {
         return "";
       }
@@ -156,6 +157,9 @@
       show(d);
       fadeAncestors(d);
       update();
+      if (typeof clickHandler === 'function') {
+        clickHandler(d);
+      }
     }
 
     function searchTree(d, term) {
@@ -184,14 +188,27 @@
       }
     }
 
+    function doSort(a, b) {
+      if (typeof sort === 'function') {
+        return sort(a, b);
+      } else if (sort) {
+        return d3.ascending(a.name, b.name);
+      } else {
+        return 0;
+      }
+    }
+
     var partition = d3.layout.partition()
-      .sort(function(a, b) {return d3.ascending(a.name, b.name);})
+      .sort(doSort)
       .value(function(d) {return d.v || d.value;})
       .children(function(d) {return d.c || d.children;});
 
     function update() {
 
       selection.each(function(data) {
+
+        var x = d3.scale.linear().range([0, w]),
+            y = d3.scale.linear().range([0, c]);
 
         var nodes = partition(data);
 
@@ -216,7 +233,8 @@
         node.append("svg:rect")
           .attr("width", function(d) { return d.dx * kx; });
 
-        node.append("svg:title");
+        if (!tooltip)
+          node.append("svg:title");
 
         node.append("foreignObject")
           .append("xhtml:div");
@@ -231,8 +249,9 @@
           .attr("fill", function(d) {return d.highlight ? "#E600E6" : colorHash(d.name); })
           .style("visibility", function(d) {return d.dummy ? "hidden" : "visible";});
 
-        g.select("title")
-          .text(label);
+        if (!tooltip)
+          g.select("title")
+            .text(label);
 
         g.select("foreignObject")
           .attr("width", function(d) { return d.dx * kx; })
@@ -251,7 +270,7 @@
         g.on('mouseover', function(d) {
           if(!d.dummy) {
             if (tooltip) tip.show(d);
-            setDetails("Function: " + label(d));
+            setDetails(label(d));
           }
         }).on('mouseout', function(d) {
           if(!d.dummy) {
@@ -263,6 +282,7 @@
     }
 
     function chart(s) {
+
       selection = s;
 
       if (!arguments.length) return chart;
@@ -273,7 +293,7 @@
           .append("svg:svg")
           .attr("width", w)
           .attr("height", h)
-          .attr("class", "partition")
+          .attr("class", "partition d3-flame-graph")
           .call(tip);
 
         svg.append("svg:text")
@@ -315,25 +335,16 @@
 
     chart.tooltip = function (_) {
       if (!arguments.length) { return tooltip; }
-      tooltip = _;
+      if (typeof _ === "function") {
+        tip = _;
+      }
+      tooltip = true;
       return chart;
     };
 
     chart.title = function (_) {
       if (!arguments.length) { return title; }
       title = _;
-      return chart;
-    };
-
-    chart.tooltipDirection = function (_) {
-      if (!arguments.length) { return tooltipDirection; }
-      tooltipDirection = _;
-      return chart;
-    };
-
-    chart.tooltipOffset = function (_) {
-      if (!arguments.length) { return tooltipOffset; }
-      tooltipOffset = _;
       return chart;
     };
 
@@ -349,6 +360,19 @@
       return chart;
     };
 
+    chart.sort = function (_) {
+      if (!arguments.length) { return sort; }
+      sort = _;
+      return chart;
+    };
+
+
+    chart.label = function(_) {
+      if (!arguments.length) { return labelFormat; }
+      labelFormat = _;
+      return chart;
+    };
+
     chart.search = function(term) {
       selection.each(function(data) {
         searchTree(data, term);
@@ -361,6 +385,20 @@
         clear(data);
         update();
       });
+    };
+
+    chart.resetZoom = function() {
+      selection.each(function (data) {
+        zoom(data); // zoom to root
+      });
+    };
+
+    chart.onClick = function(_) {
+      if (!arguments.length) {
+        return clickHandler;
+      }
+      clickHandler = _;
+      return chart;
     };
 
     return chart;
